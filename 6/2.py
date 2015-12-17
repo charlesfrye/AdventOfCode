@@ -3,13 +3,14 @@ from matplotlib import pyplot as plt
 import sys
 
 def turnOn(block):
-    block[:] = np.ones_like(block)
+    block += 1
 
 def turnOff(block):
-    block[:] = np.zeros_like(block)
+    block -= 1
+    block[block<0] = 0
 
 def toggle(block):
-    block[:] = 1-block
+    block += 2
 
 def parse(line):
     split = line.split(' ')
