@@ -1,43 +1,67 @@
 import sys
+from collections import namedtuple
+
+Element = namedtuple('Element',['op','arg1','arg2'])
 
 class Circuit():
+    """produce a model circuit by:
+    1) parsing input
+    2) assigning wirenames to parses
+    3) resolving wire values on completion"""
 
     def __init__(self):
-        self.varD = {}
+        self.elements = {}
+        self._cache = {}
         self.ops = {'NOT': self.NOT,
                     'AND': self.AND,
                     'OR': self.OR,
                     'LSHIFT':self.LSHIFT,
-                    'RSHIFT':self.RSHIFT}
+                    'RSHIFT':self.RSHIFT,
+                    'ASSIGN':self.ASSIGN
+                    }
         self.busWidth = 16
-        self.false = [False]*self.busWidth
 
     def parse(self,line):
         line = line.split('->')
-        sigStr = line[0]
+        inpStr = line[0].strip()
         destStr = line[1].strip()
-        sig = self.getSig(sigStr)
-        return sig,destStr
+        element = self.getElement(inpStr)
+        return element,destStr
 
-    def assign(self,sig,destStr):
-        self.varD[destStr] = sig
+    def assign(self,element,destStr):
+        self.elements[destStr] = element
 
-    def getSig(self,sigStr):
-        sig = sigStr.split(' ')
-        args = []; op = []
-        while not sig == []:
-            token = sig.pop(0)
+    def resolve(self,wire):
+        if  wire == [] or ((type(wire) is list) and (len(wire) == self.busWidth)):
+            return wire
+        elif type(wire) is int:
+            return self.int2arr(wire)
+        if wire in self._cache:
+            return self._cache[wire]
+        element = self.elements[wire]
+        print(wire)
+        out = self.ops[element.op](self.resolve(element.arg1),
+                                   self.resolve(element.arg2))
+        if ((type(out) is list) and (len(out) == self.busWidth)):
+            self._cache[wire] = out
+        return out
+
+
+    def getElement(self,inpStr):
+        inp = inpStr.split(' ')
+        args = []; op = 'ASSIGN'
+        while not inp == []:
+            token = inp.pop(0)
             if token.isnumeric():
-                args.append(self.int2arr(int(token)))
+                args.append(int(token))
             elif token in self.ops:
                 op = token
             else:
-                if token in self.varD:
-                    args.append(self.varD[token])
-                else:
-                    self.varD[token] = self.false
-                    args.append(self.false)
-        return self.computeSig(args,op)
+                args.append(token)
+        if len(args) == 1:
+            args.append([])
+        element = Element(op=op,arg1=args[0],arg2=args[1])
+        return element
 
     def computeSig(self,args,op):
         if op == []:
@@ -45,29 +69,32 @@ class Circuit():
         else:
             return self.ops[op](args)
 
-    def NOT(self,args):
-        string = args[0]
+    def NOT(self,arg1,_):
+        string = arg1
         return [not a for a in string]
 
-    def AND(self,args):
-        string1 = args[0]
-        string2 = args[1]
+    def AND(self,arg1,arg2):
+        string1 = arg1
+        string2 = arg2
         return [a and b for a,b in zip(string1,string2)]
 
-    def OR(self,args):
-        string1 = args[0]
-        string2 = args[1]
+    def OR(self,arg1,arg2):
+        string1 = arg1
+        string2 = arg2
         return [a or b for a,b in zip(string1,string2)]
 
-    def LSHIFT(self,args):
-        string = args[0]
-        shift = self.arr2int(args[1])
+    def LSHIFT(self,arg1,arg2):
+        string = arg1
+        shift = self.arr2int(arg2)
         return string[shift:]+[False]*shift
 
-    def RSHIFT(self,args):
-        string = args[0]
-        shift = self.arr2int(args[1])
+    def RSHIFT(self,arg1,arg2):
+        string = arg1
+        shift = self.arr2int(arg2)
         return [False]*shift+string[:-shift]
+
+    def ASSIGN(self,arg1,_):
+        return self.resolve(arg1)
 
     def int2arr(self,num):
         binaryString = bin(num)[2:].zfill(self.busWidth)
@@ -83,7 +110,7 @@ circuit = Circuit()
 
 with open(sys.argv[1]) as f:
     for line in f:
-        signal, destination = circuit.parse(line)
-        circuit.assign(signal,destination)
+        inp, destination = circuit.parse(line)
+        circuit.assign(inp,destination)
 
-print(circuit.arr2int(circuit.varD[sys.argv[2]]))
+print(circuit.arr2int(circuit.resolve(sys.argv[2])))
